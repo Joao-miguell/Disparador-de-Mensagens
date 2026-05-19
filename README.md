@@ -81,8 +81,8 @@ Disparador de Mensagens/
 
 **1. Clone o repositório**
 ```bash
-git clone https://github.com/seu-usuario/disparador-amtech.git
-cd disparador-amtech
+git clone https://github.com/Joao-miguell/Disparador-de-Mensagens.git
+cd Disparador-de-Mensagens
 ```
 
 **2. Crie e ative um ambiente virtual (recomendado)**
