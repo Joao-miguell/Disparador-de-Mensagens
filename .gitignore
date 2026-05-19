@@ -5,7 +5,7 @@ mensagem_padrao.txt
 last_line.json
 numeros_enviados.json
 settings.json
-mesagens_enviadas.log
+mensagens_enviadas.log
 
 # ── Ambiente virtual Python ──
 venv/

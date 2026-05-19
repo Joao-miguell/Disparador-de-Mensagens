@@ -152,7 +152,7 @@ Ao executar a aplicação, os seguintes arquivos são criados automaticamente na
 | `last_line.json` | Última linha processada na planilha |
 | `numeros_enviados.json` | Histórico de números que já receberam mensagem |
 | `settings.json` | Tema visual selecionado |
-| `mesagens_enviadas.log` | Log de todos os envios realizados |
+| `mensagens_enviadas.log` | Log de todos os envios realizados |
 
 ---
 

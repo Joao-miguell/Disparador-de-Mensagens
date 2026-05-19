@@ -26,7 +26,7 @@ from app.utils.file_manager import (
 )
 
 logging.basicConfig(
-    filename="mesagens_enviadas.log",
+    filename="mensagens_enviadas.log",
     level=logging.INFO,
     format="%(asctime)s - %(message)s",
 )
