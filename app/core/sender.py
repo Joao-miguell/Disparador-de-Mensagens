@@ -79,7 +79,6 @@ def limpar_telefone(valor) -> int | None:
         return None
 
 
-
 # ──────────────────────── CLASSE PRINCIPAL ────────────────────────
 
 class MessageSender:
@@ -167,6 +166,8 @@ class MessageSender:
         if telefone is None or self._ja_enviado(telefone):
             return
 
+        # No modo simples o modelo é enviado sem substituição de variáveis.
+        # Se o texto contiver {chaves}, elas aparecerão literalmente na mensagem.
         self._disparar(telefone, modelo)
         self._registrar(telefone, nome, "", linha_log)
 
