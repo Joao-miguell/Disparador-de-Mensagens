@@ -492,6 +492,8 @@ class CourseOfferGUI:
             return None
 
     def _run_sender(self, config: SendConfig) -> None:
+        processadas, puladas = 0, 0
+        cancelado = False
         try:
             sender = MessageSender(
                 config=config,
@@ -501,6 +503,7 @@ class CourseOfferGUI:
                 root=self.root,
             )
             processadas, puladas = sender.run()
+            cancelado = not self.running
 
             self.numeros_enviados = sender.numeros_enviados
 
@@ -509,10 +512,12 @@ class CourseOfferGUI:
         except Exception as exc:
             tkinter.messagebox.showerror("Erro Grave", f"O programa encontrou um erro:\n{exc}")
         finally:
-            self._finalizar_envio(
-                processadas if self.running else 0,
-                puladas if self.running else 0,
-            )
+            if not cancelado:
+                self._finalizar_envio(processadas, puladas)
+            else:
+                self.running = False
+                self.progress["value"] = 0
+                self.root.attributes("-topmost", False)
 
     def _update_progress(self, value: int) -> None:
         self.progress["value"] = value
