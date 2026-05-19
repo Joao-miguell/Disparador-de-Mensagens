@@ -42,6 +42,13 @@ def limpar_telefone(valor) -> int | None:
     if not valor:
         return None
 
+    # Pandas lê colunas com células vazias como float (ex: 44998618601.0)
+    # Converte para int antes de transformar em string para eliminar o ".0"
+    try:
+        valor = int(float(str(valor)))
+    except (ValueError, OverflowError):
+        pass  # se não conseguir converter, segue com o valor original
+
     apenas_numeros = re.sub(r"\D", "", str(valor))
 
     if not apenas_numeros:
@@ -49,18 +56,18 @@ def limpar_telefone(valor) -> int | None:
 
     # Já tem DDI 55 → valida tamanho (12 = fixo, 13 = celular)
     if apenas_numeros.startswith("55") and len(apenas_numeros) in (12, 13):
-        pass  # já está correto
+        pass
 
     # Tem DDD + número, sem DDI (10 ou 11 dígitos) → adiciona 55
     elif len(apenas_numeros) in (10, 11):
         apenas_numeros = "55" + apenas_numeros
 
-    # Só o número sem DDD → não dá para recuperar, descarta
+    # Qualquer outro tamanho → inválido
     else:
         logging.warning("Número ignorado por formato inválido: %s", valor)
         return None
 
-    # Valida DDD brasileiro (11–99, exceto faixas inexistentes)
+    # Valida DDD brasileiro (11–99)
     ddd = int(apenas_numeros[2:4])
     if not (11 <= ddd <= 99):
         logging.warning("DDD inválido no número: %s", valor)
@@ -256,7 +263,7 @@ class MessageSender:
         pyautogui.hotkey("ctrl", "v")
         sleep(3)          # aguarda texto aparecer no campo antes de enviar  ← era 1s
         pyautogui.press("enter")
-        sleep(8)          # aguarda envio completar antes de fechar
+        sleep(9)          # aguarda envio completar antes de fechar
         pyautogui.hotkey("ctrl", "w")
 
     def _disparar_sem_imagem(self, telefone: int, mensagem: str) -> None:
