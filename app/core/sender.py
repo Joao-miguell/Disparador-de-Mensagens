@@ -87,9 +87,11 @@ class MessageSender:
     Executa o ciclo de envio de mensagens WhatsApp.
 
     Parâmetros de callbacks:
-      on_progress(value)  — chamado a cada linha para atualizar a barra
-      is_running()        — retorna False quando o usuário cancela
-      on_clipboard(root)  — acesso à janela raiz para clipboard (opcional)
+      on_progress(value)         — chamado a cada linha para atualizar a barra
+      is_running()               — retorna False quando o usuário cancela
+      on_status(linha, total, n) — chamado com status de linha atual (opcional)
+      on_invalid(valor)          — chamado quando um número é inválido (opcional)
+      root                       — acesso à janela raiz para clipboard (opcional)
     """
 
     def __init__(
@@ -99,25 +101,31 @@ class MessageSender:
         on_progress: Callable[[int], None],
         is_running: Callable[[], bool],
         root=None,
+        on_status: Callable[[int, int, str], None] | None = None,
+        on_invalid: Callable[[str], None] | None = None,
     ) -> None:
         self.config = config
         self.numeros_enviados = numeros_enviados
         self.on_progress = on_progress
         self.is_running = is_running
         self.root = root
+        self.on_status = on_status
+        self.on_invalid = on_invalid
 
         self.linhas_processadas = 0
         self.linhas_puladas_historico = 0
+        self.invalidos: list[str] = []
 
     # ── Ponto de entrada ──
 
-    def run(self) -> tuple[int, int]:
+    def run(self) -> tuple[int, int, list[str]]:
         """
-        Executa o envio. Retorna (linhas_processadas, linhas_puladas_historico).
+        Executa o envio. Retorna (linhas_processadas, linhas_puladas_historico, invalidos).
         """
         cfg = self.config
         alunos = self._carregar_planilha(cfg.caminho_planilha)
         modelo = carregar_mensagem_padrao()
+        total = cfg.linha_max - cfg.linha_min
 
         for x in range(cfg.linha_min, cfg.linha_max):
             if not self.is_running():
@@ -126,12 +134,20 @@ class MessageSender:
 
             self.on_progress(x - cfg.linha_min + 1)
 
+            # Emite status com número do contato (se disponível)
+            if self.on_status:
+                try:
+                    numero_raw = alunos.loc[x, "Whatsapp com DDD (somente números - sem espaço)"]
+                    self.on_status(x - cfg.linha_min + 1, total, str(numero_raw))
+                except Exception:
+                    self.on_status(x - cfg.linha_min + 1, total, "")
+
             try:
                 self._processar_linha(x, alunos, modelo)
             except Exception as exc:
                 logging.warning("Erro ao processar linha %d: %s", x, exc)
 
-        return self.linhas_processadas, self.linhas_puladas_historico
+        return self.linhas_processadas, self.linhas_puladas_historico, self.invalidos
 
     # ── Processamento por linha ──
 
@@ -190,9 +206,12 @@ class MessageSender:
 
     def _extrair_contato(self, x: int, alunos: pd.DataFrame) -> tuple[str, int | None]:
         nome = alunos.loc[x, "Nome Completo"]
-        telefone = limpar_telefone(
-            alunos.loc[x, "Whatsapp com DDD (somente números - sem espaço)"]
-        )
+        valor_raw = alunos.loc[x, "Whatsapp com DDD (somente números - sem espaço)"]
+        telefone = limpar_telefone(valor_raw)
+        if telefone is None and valor_raw:
+            self.invalidos.append(str(valor_raw))
+            if self.on_invalid:
+                self.on_invalid(str(valor_raw))
         return nome, telefone
 
     def _cursos_do_aluno(self, x: int, alunos: pd.DataFrame) -> list[str]:
