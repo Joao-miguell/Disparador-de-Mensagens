@@ -1,0 +1,19 @@
+Olá *{nome}.* Nós somos da AMTECH - Agência Maringá de Tecnologia e Inovação. entramos em contato porque você demonstrou interesse em cursos de tecnologia preenchendo um formulário.📋
+
+Nós iremos iniciar em parceria com o *{parceiro}*, o curso:
+
+🌟*{curso}*.🌟
+
+Todos podem participar desde que sejam maior de *{idade_minima}* anos e tenham a escolaridade mínima do Ensino Fundamental Completo.🎓
+
+🎯 Duração do curso: *{duracao}*
+
+🕒 Horário: *{horario}*
+
+⚠️ Atenção: As vagas são limitadas! Responda o mais rápido possível! 🏃‍♂️💨 📢*
+
+*📍Local: Acesso 1 | Piso Superior Terminal Urbano - Av. Tamandaré, 600 - Zona 01, Maringá🗺️ -*
+
+*🏫 MODALIDADE: curso é PRESENCIAL E 100% GRATUITO! 🎉*
+
+Qualquer dúvida, estamos à disposição! Esperamos você! 😉
