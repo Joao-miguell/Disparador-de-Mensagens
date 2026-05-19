@@ -16,6 +16,7 @@ from app.utils.file_manager import (
     salvar_mensagem_padrao,
     salvar_templates_mensagens,
 )
+from app.utils.widgets import configure_combobox_dropdown_scroll
 
 
 class MessageEditor(ttkb.Toplevel):
@@ -69,6 +70,7 @@ class MessageEditor(ttkb.Toplevel):
 
         self.combo_templates = ttkb.Combobox(frame, state="readonly", width=30)
         self.combo_templates.pack(side="left", padx=5)
+        configure_combobox_dropdown_scroll(self.combo_templates)
 
         buttons = [
             ("📂 Carregar", "info", self.load_template),

@@ -26,7 +26,15 @@ from app.utils.file_manager import (
     salvar_numeros_enviados,
     save_settings,
 )
-from app.utils.widgets import add_placeholder, block_combobox_mousewheel, create_tooltip, is_combobox
+from app.utils.widgets import (
+    add_placeholder,
+    block_combobox_mousewheel,
+    configure_combobox_dropdown_scroll,
+    create_tooltip,
+    is_combobox_dropdown_listbox,
+    scroll_listbox,
+    scroll_listbox_path,
+)
 
 
 class CourseOfferGUI:
@@ -51,8 +59,6 @@ class CourseOfferGUI:
         self.config_cursos = carregar_cursos()
         self.running = False
 
-        block_combobox_mousewheel(self.root)
-
         self._build_scroll_container()
         self._build_header()
         self._build_title()
@@ -62,6 +68,9 @@ class CourseOfferGUI:
         self._build_linhas_block()
         self._build_acoes_block()
         self._build_credits()
+
+        block_combobox_mousewheel(self.root, on_wheel=self._scroll_canvas)
+        self._configure_combobox_scroll()
 
     # ══════════════════════════════════════════════
     # CONSTRUÇÃO DA UI
@@ -281,25 +290,63 @@ class CourseOfferGUI:
         for combo in (self.combo_course, self.combo_partner, self.combo_group):
             combo.config(state=combo_state)
 
+    def _configure_combobox_scroll(self) -> None:
+        for combo in (
+            self.combo_theme,
+            self.combo_course,
+            self.combo_partner,
+            self.combo_group,
+        ):
+            configure_combobox_dropdown_scroll(combo)
+
+    def _scroll_canvas(self, event) -> None:
+        if getattr(event, "num", None) == 4:
+            self.canvas.yview_scroll(-1, "units")
+        elif getattr(event, "num", None) == 5:
+            self.canvas.yview_scroll(1, "units")
+        else:
+            self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def _popdown_listbox_path_at_pointer(self, event) -> str | None:
+        widget = event.widget
+        if is_combobox_dropdown_listbox(widget):
+            return widget._w
+
+        try:
+            path = self.root.tk.call("winfo", "containing", event.x_root, event.y_root)
+        except tkinter.TclError:
+            return None
+
+        if not path:
+            return None
+
+        path_str = str(path)
+        if "popdown" in path_str.lower() and path_str.lower().endswith(".l"):
+            return path_str
+
+        return None
+
     def _on_mousewheel(self, event) -> str | None:
-        if self._mousewheel_over_combobox(event.widget):
+        path = self._popdown_listbox_path_at_pointer(event)
+        if path is not None:
+            scroll_listbox_path(self.root.tk, path, event)
             return "break"
-        self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        if is_combobox_dropdown_listbox(event.widget):
+            scroll_listbox(event.widget, event)
+            return "break"
+        self._scroll_canvas(event)
         return None
 
     def _on_mousewheel_linux(self, event) -> str | None:
-        if self._mousewheel_over_combobox(event.widget):
+        path = self._popdown_listbox_path_at_pointer(event)
+        if path is not None:
+            scroll_listbox_path(self.root.tk, path, event)
             return "break"
-        self.canvas.yview_scroll(-1 if event.num == 4 else 1, "units")
+        if is_combobox_dropdown_listbox(event.widget):
+            scroll_listbox(event.widget, event)
+            return "break"
+        self._scroll_canvas(event)
         return None
-
-    @staticmethod
-    def _mousewheel_over_combobox(widget) -> bool:
-        while widget:
-            if is_combobox(widget):
-                return True
-            widget = widget.master
-        return False
 
     # ══════════════════════════════════════════════
     # AÇÕES
