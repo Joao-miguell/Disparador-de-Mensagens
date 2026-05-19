@@ -1,0 +1,22 @@
+# ── Arquivos gerados automaticamente pelo app ──
+config_cursos.json
+templates_mensagens.json
+mensagem_padrao.txt
+last_line.json
+numeros_enviados.json
+settings.json
+mesagens_enviadas.log
+
+# ── Ambiente virtual Python ──
+venv/
+.venv/
+env/
+
+# ── Cache do Python ──
+__pycache__/
+*.py[cod]
+
+# ── IDEs ──
+.vscode/
+.idea/
+*.code-workspace
