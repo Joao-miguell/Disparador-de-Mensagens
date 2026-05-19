@@ -35,14 +35,42 @@ logging.basicConfig(
 # ──────────────────────── HELPERS ────────────────────────
 
 def limpar_telefone(valor) -> int | None:
-    """Remove tudo que não é dígito e retorna int, ou None se inválido."""
+    """
+    Remove formatação, valida e normaliza para o padrão internacional brasileiro.
+    Retorna int com DDI 55 incluso, ou None se inválido.
+    """
     if not valor:
         return None
+
     apenas_numeros = re.sub(r"\D", "", str(valor))
+
+    if not apenas_numeros:
+        return None
+
+    # Já tem DDI 55 → valida tamanho (12 = fixo, 13 = celular)
+    if apenas_numeros.startswith("55") and len(apenas_numeros) in (12, 13):
+        pass  # já está correto
+
+    # Tem DDD + número, sem DDI (10 ou 11 dígitos) → adiciona 55
+    elif len(apenas_numeros) in (10, 11):
+        apenas_numeros = "55" + apenas_numeros
+
+    # Só o número sem DDD → não dá para recuperar, descarta
+    else:
+        logging.warning("Número ignorado por formato inválido: %s", valor)
+        return None
+
+    # Valida DDD brasileiro (11–99, exceto faixas inexistentes)
+    ddd = int(apenas_numeros[2:4])
+    if not (11 <= ddd <= 99):
+        logging.warning("DDD inválido no número: %s", valor)
+        return None
+
     try:
         return int(apenas_numeros)
     except ValueError:
         return None
+
 
 
 # ──────────────────────── CLASSE PRINCIPAL ────────────────────────
@@ -209,32 +237,32 @@ class MessageSender:
     def _disparar_com_imagem(self, telefone: int, mensagem: str, img_path: str) -> None:
         link = f"https://web.whatsapp.com/send/?phone={telefone}"
         webbrowser.open(link)
-        sleep(17)   # aguarda o WhatsApp Web carregar
+        sleep(20)  # margem maior para carregamento
 
         caminho_win = os.path.normpath(img_path).replace("'", "''")
         subprocess.run(
             f"powershell -command \"Set-Clipboard -Path '{caminho_win}'\"",
             shell=True,
         )
-        sleep(1)
+        sleep(2)          # aguarda clipboard de imagem estar pronto
         pyautogui.hotkey("ctrl", "v")
-        sleep(3)
+        sleep(4)          # aguarda preview da imagem aparecer no campo
 
         if self.root:
             self.root.clipboard_clear()
             self.root.clipboard_append(mensagem)
             self.root.update()
-        sleep(1)
+        sleep(2)          # aguarda clipboard de texto estar pronto
         pyautogui.hotkey("ctrl", "v")
-        sleep(1)
+        sleep(3)          # aguarda texto aparecer no campo antes de enviar  ← era 1s
         pyautogui.press("enter")
-        sleep(6)
+        sleep(8)          # aguarda envio completar antes de fechar
         pyautogui.hotkey("ctrl", "w")
 
     def _disparar_sem_imagem(self, telefone: int, mensagem: str) -> None:
         link = f"https://web.whatsapp.com/send/?phone={telefone}&text={quote(mensagem)}"
         webbrowser.open(link)
-        sleep(17)
+        sleep(20)         # margem maior para carregamento  ← era 17s
         pyautogui.press("enter")
-        sleep(6)
+        sleep(8)          # aguarda envio completar  ← era 6s
         pyautogui.hotkey("ctrl", "w")
