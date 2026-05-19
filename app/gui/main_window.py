@@ -412,8 +412,20 @@ class CourseOfferGUI:
         self._editor_refresh_combo()
 
     def _reload_editor_text(self) -> None:
-        """Recarrega o texto atual de mensagem_padrao.txt no editor (chamado ao entrar na página)."""
-        texto = carregar_mensagem_padrao()
+        """Recarrega texto e templates do disco ao entrar na página do editor."""
+        # Recarrega templates do disco para refletir alterações externas
+        self._editor_templates = carregar_templates_mensagens()
+        self._editor_refresh_combo()
+
+        try:
+            texto = carregar_mensagem_padrao()
+        except Exception as exc:
+            tkinter.messagebox.showwarning(
+                "Aviso",
+                f"Não foi possível carregar a mensagem padrão:\n{exc}",
+                parent=self.root,
+            )
+            texto = ""
         self.txt_mensagem.delete("1.0", tkinter.END)
         self.txt_mensagem.insert("1.0", texto)
 
@@ -501,6 +513,8 @@ class CourseOfferGUI:
 
     def _build_course_editor_page(self, container: ttk.Frame) -> None:
         """Replica a UI do CourseEditor como página embutida."""
+        # O container usa .grid() para as duas colunas principais.
+        # Os frames internos de botões (frame_cat_btns, frame_cur_btns) usam .pack() — correto.
         container.grid_columnconfigure(0, weight=1)
         container.grid_columnconfigure(1, weight=1)
         container.grid_rowconfigure(2, weight=1)
@@ -550,6 +564,8 @@ class CourseOfferGUI:
         """Reinicia _editor_dados como cópia fresca de config_cursos e atualiza as listboxes."""
         self._editor_dados = {k: list(v) for k, v in self.config_cursos.items()}
         self._cursos_refresh_categorias()
+        # Limpa seleção e conteúdo para evitar estado visual inconsistente
+        self.listbox_categorias.selection_clear(0, tkinter.END)
         self.listbox_cursos.delete(0, tkinter.END)
 
     def _cursos_refresh_categorias(self) -> None:
@@ -606,7 +622,9 @@ class CourseOfferGUI:
 
     def _salvar_cursos_editor(self) -> None:
         self._salvar_cursos(self._editor_dados)
+        # Navega primeiro, depois exibe o popup — feedback aparece sobre a tela principal
         self._show_page("main")
+        tkinter.messagebox.showinfo("Sucesso", "Lista de cursos atualizada com sucesso!", parent=self.root)
 
     # ══════════════════════════════════════════════
     # HELPERS DE UI
@@ -636,6 +654,7 @@ class CourseOfferGUI:
             self.combo_course,
             self.combo_partner,
             self.combo_group,
+            self.combo_templates,  # página editor
         ):
             configure_combobox_dropdown_scroll(combo)
 
@@ -786,10 +805,11 @@ class CourseOfferGUI:
         ttkb.Button(win, text="Fechar", command=win.destroy, bootstyle="secondary").pack(pady=10)  # type: ignore
 
     def _salvar_cursos(self, novos_dados: dict) -> None:
+        """Persiste os dados de cursos e atualiza o combo da tela principal.
+        O feedback ao usuário fica a cargo do chamador."""
         self.config_cursos = novos_dados
         salvar_cursos_json(self.config_cursos)
         self._refresh_curso_combo()
-        tkinter.messagebox.showinfo("Sucesso", "Lista de cursos atualizada com sucesso!")
 
     def _change_theme(self, theme: str) -> None:
         self.style.theme_use(theme)
