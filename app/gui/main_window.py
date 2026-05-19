@@ -219,7 +219,6 @@ class CourseOfferGUI:
         self.lbl_horario.pack()
         self.schedule_entry = ttk.Entry(frame, width=35, bootstyle="info")  # type: ignore
         self.schedule_entry.pack(pady=(0, 5))
-        from app.utils.widgets import add_placeholder
         add_placeholder(self.schedule_entry, "Ex: 19:00 às 22:00")
 
         self.lbl_minage = ttk.Label(frame, text="Idade mínima:")
@@ -297,13 +296,6 @@ class CourseOfferGUI:
     # HELPERS DE UI
     # ══════════════════════════════════════════════
 
-    def _labeled_entry(self, parent, label_text: str, placeholder: str = "") -> ttk.Entry:
-        ttk.Label(parent, text=label_text).pack()
-        entry = ttk.Entry(parent, width=35, bootstyle="info")  # type: ignore
-        entry.pack(pady=(0, 5))
-        if placeholder:
-            add_placeholder(entry, placeholder)
-        return entry
 
     def _refresh_curso_combo(self) -> None:
         cursos = [c for lista in self.config_cursos.values() for c in lista]
@@ -429,16 +421,22 @@ class CourseOfferGUI:
     def _abrir_editor_mensagem(self) -> None:
         MessageEditor(self.root)
 
+    @staticmethod
+    def _get_field(entry: ttk.Entry, placeholder_prefix: str = "Ex:") -> str:
+        """Retorna o valor do campo, ou string vazia se ainda exibe o placeholder."""
+        val = entry.get()
+        return "" if placeholder_prefix in val else val
+
     def _abrir_preview(self) -> None:
         """Abre janela de preview com a mensagem formatada com os valores atuais."""
         modelo = carregar_mensagem_padrao()
         simple = self.simple_mode_var.get()
 
-        horario  = self.schedule_entry.get() if not simple else ""
-        duracao  = self.duration_entry.get()  if not simple else ""
-        minage   = self.minage_entry.get()    if not simple else ""
-        curso    = self.course_selected.get() if not simple else ""
-        parceiro = self.partner_selected.get() if not simple else ""
+        horario  = self._get_field(self.schedule_entry) if not simple else ""
+        duracao  = self._get_field(self.duration_entry)  if not simple else ""
+        minage   = self.minage_entry.get()               if not simple else ""
+        curso    = self.course_selected.get()            if not simple else ""
+        parceiro = self.partner_selected.get()           if not simple else ""
         idade    = int(minage) if minage.strip().isdigit() else 0
 
         try:
