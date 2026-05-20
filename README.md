@@ -217,8 +217,8 @@ No editor de mensagem, use as variáveis abaixo entre `{ }` — o robô as subst
 
 Desenvolvido por:
 
-- **Lucas Ferrari**
-- **Eduardo Zanin**
-- **João Miguel**
+- **Lucas Ferrari** https://github.com/lucasferrarisoares
+- **Eduardo Zanin** https://github.com/eduardozaninn
+- **João Miguel** https://github.com/Joao-miguell WhatsApp: (44) 998618601
 
 Projeto desenvolvido para a **AMTECH — Agência Maringá de Tecnologia e Inovação**.
