@@ -23,3 +23,8 @@ __pycache__/
 
 # ── Testes ──
 tests/
+
+# ── PyInstaller ──
+dist/
+build/
+*.spec
