@@ -136,7 +136,7 @@ class CourseOfferGUI:
 
         self.canvas_window = self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfig(
-            self.canvas_window, width=min(e.width, 580)))
+            self.canvas_window, width=e.width))
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
 
         self.canvas.pack(side="left", fill="both", expand=True)
@@ -370,13 +370,19 @@ class CourseOfferGUI:
         ttkb.Label(container, text=info_vars, bootstyle="info", justify="center").pack(pady=8)  # type: ignore
 
         # ── Biblioteca de templates ──
+        # lib_frame usa grid: linha 0 = combobox (fill), linha 1 = botões centralizados
         lib_frame = ttk.LabelFrame(container, text=" 📚 Biblioteca de Modelos Salvos ", padding=10, bootstyle="primary")  # type: ignore
         lib_frame.pack(fill="x", padx=15, pady=5)
+        lib_frame.columnconfigure(0, weight=1)
 
-        self.combo_templates = ttkb.Combobox(lib_frame, state="readonly", width=30)  # type: ignore
-        self.combo_templates.pack(side="left", padx=5)
+        # Linha 0: combobox ocupa toda a largura
+        self.combo_templates = ttkb.Combobox(lib_frame, state="readonly")  # type: ignore
+        self.combo_templates.grid(row=0, column=0, sticky="ew", padx=5, pady=(0, 6))
         configure_combobox_dropdown_scroll(self.combo_templates)
 
+        # Linha 1: 4 botões centralizados — nunca ficam cortados independente da escala
+        btn_row = ttk.Frame(lib_frame)
+        btn_row.grid(row=1, column=0)
         template_buttons = [
             ("📂 Carregar",   "info",    self._editor_load_template),
             ("➕ Salvar Novo", "success", self._editor_save_new_template),
@@ -384,7 +390,7 @@ class CourseOfferGUI:
             ("🗑️ Excluir",    "danger",  self._editor_delete_template),
         ]
         for text, style, cmd in template_buttons:
-            ttkb.Button(lib_frame, text=text, bootstyle=style, command=cmd).pack(side="left", padx=5)  # type: ignore
+            ttkb.Button(btn_row, text=text, bootstyle=style, command=cmd).pack(side="left", padx=4)  # type: ignore
 
         # ── Área de texto (atributo público — usado pelos testes) ──
         self.txt_mensagem = scrolledtext.ScrolledText(
@@ -689,6 +695,9 @@ class CourseOfferGUI:
         return None
 
     def _on_mousewheel(self, event) -> str | None:
+        # Ignora eventos de Toplevels externos (ex: janela de Preview)
+        if event.widget.winfo_toplevel() is not self.root:
+            return None
         path = self._popdown_listbox_path_at_pointer(event)
         if path is not None:
             scroll_listbox_path(self.root.tk, path, event)
@@ -700,6 +709,9 @@ class CourseOfferGUI:
         return None
 
     def _on_mousewheel_linux(self, event) -> str | None:
+        # Ignora eventos de Toplevels externos (ex: janela de Preview)
+        if event.widget.winfo_toplevel() is not self.root:
+            return None
         path = self._popdown_listbox_path_at_pointer(event)
         if path is not None:
             scroll_listbox_path(self.root.tk, path, event)
