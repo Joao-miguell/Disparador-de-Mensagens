@@ -148,6 +148,19 @@ Clique em **🚀 ENVIAR MENSAGENS**. O robô abrirá cada contato no WhatsApp We
 ### Editar mensagem e gerenciar cursos
 Use os botões **📝 Editar Mensagem** e **⚙️ Gerenciar Cursos** no topo da tela. Eles abrem páginas embutidas dentro da própria janela — sem popups separados. Um botão **← Voltar** retorna à tela principal.
 
+#### Editor de Mensagem
+- Selecione um modelo salvo no campo **Biblioteca de Modelos** — o texto carrega automaticamente.
+- Para criar um novo modelo, clique em **➕ Salvar Novo**: o campo de título fica disponível para digitação e a área de texto é limpa. Preencha os dois campos e clique em **💾 Confirmar Salvamento**.
+- Use **🔄 Atualizar** para sobrescrever o modelo selecionado com o texto atual.
+- Use **🗑️ Excluir** para remover o modelo selecionado da biblioteca.
+- Clique em **✅ APLICAR ESTA MENSAGEM NO ROBÔ** para definir o texto que será usado no próximo envio.
+
+#### Gerenciador de Cursos
+- As categorias aparecem como **cards clicáveis** (2 por linha). Clique em um card para selecioná-lo e ver os cursos à direita.
+- Use os botões **+ Categoria** e **− Remover** para gerenciar as categorias.
+- Com uma categoria selecionada, use **+ Curso** e **− Remover** para gerenciar os cursos dentro dela.
+- Clique em **💾 SALVAR ALTERAÇÕES** para confirmar e voltar à tela principal.
+
 ---
 
 ## 📁 Arquivos Gerados
