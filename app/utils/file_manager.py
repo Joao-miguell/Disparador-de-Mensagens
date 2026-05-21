@@ -1,27 +1,37 @@
-"""
-file_manager.py
-===============
-Responsável por toda a persistência em disco:
-  - Configurações de cursos      (config_cursos.json)
-  - Templates de mensagens       (templates_mensagens.json)
-  - Mensagem padrão ativa        (mensagem_padrao.txt)
-  - Última linha processada      (last_line.json)
-  - Configurações de tema        (settings.json)
-  - Histórico de números enviados (numeros_enviados.json)
-"""
-
 import json
 import os
+import sys
 from typing import Any
+
+
+def _get_base_dir() -> str:
+    """Retorna a pasta onde os arquivos de dados devem ser salvos.
+
+    - Executável compilado (PyInstaller): mesma pasta do .exe
+    - Script Python (desenvolvimento): raiz do projeto
+    """
+    if getattr(sys, "frozen", False):
+        # Rodando como .exe — salva na mesma pasta do executável
+        return os.path.dirname(sys.executable)
+    # Rodando como script — sobe 2 níveis a partir de app/utils/
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+# Variável mutável: testes podem substituir fm.BASE_DIR = tmp_dir para isolar operações
+BASE_DIR: str = _get_base_dir()
+
+
+def _path(filename: str) -> str:
+    """Retorna o caminho completo de um arquivo de dados dentro de BASE_DIR."""
+    return os.path.join(BASE_DIR, filename)
 
 
 # ──────────────────────────── CURSOS ────────────────────────────
 
-CURSOS_FILE = "config_cursos.json"
-
 def carregar_cursos() -> dict[str, list[str]]:
-    if os.path.exists(CURSOS_FILE):
-        with open(CURSOS_FILE, "r", encoding="utf-8") as f:
+    caminho = _path("config_cursos.json")
+    if os.path.exists(caminho):
+        with open(caminho, "r", encoding="utf-8") as f:
             return json.load(f)
 
     modelo_padrao: dict[str, list[str]] = {"Geral": ["Exemplo Curso 1", "Exemplo Curso 2"]}
@@ -30,29 +40,26 @@ def carregar_cursos() -> dict[str, list[str]]:
 
 
 def salvar_cursos_json(dados: dict[str, list[str]]) -> None:
-    with open(CURSOS_FILE, "w", encoding="utf-8") as f:
+    with open(_path("config_cursos.json"), "w", encoding="utf-8") as f:
         json.dump(dados, f, indent=4, ensure_ascii=False)
 
 
 # ──────────────────────── TEMPLATES DE MENSAGENS ────────────────────────
 
-TEMPLATES_FILE = "templates_mensagens.json"
-
 def carregar_templates_mensagens() -> dict[str, str]:
-    if os.path.exists(TEMPLATES_FILE):
-        with open(TEMPLATES_FILE, "r", encoding="utf-8") as f:
+    caminho = _path("templates_mensagens.json")
+    if os.path.exists(caminho):
+        with open(caminho, "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
 
 
 def salvar_templates_mensagens(dados: dict[str, str]) -> None:
-    with open(TEMPLATES_FILE, "w", encoding="utf-8") as f:
+    with open(_path("templates_mensagens.json"), "w", encoding="utf-8") as f:
         json.dump(dados, f, indent=4, ensure_ascii=False)
 
 
 # ──────────────────────── MENSAGEM PADRÃO ATIVA ────────────────────────
-
-MENSAGEM_FILE = "mensagem_padrao.txt"
 
 _MENSAGEM_MODELO_PADRAO = (
     "Olá *{nome}.* Nós somos da AMTECH - Agência Maringá de Tecnologia e Inovação. "
@@ -68,9 +75,11 @@ _MENSAGEM_MODELO_PADRAO = (
     "Qualquer dúvida, estamos à disposição! Esperamos você! 😉"
 )
 
+
 def carregar_mensagem_padrao() -> str:
-    if os.path.exists(MENSAGEM_FILE):
-        with open(MENSAGEM_FILE, "r", encoding="utf-8") as f:
+    caminho = _path("mensagem_padrao.txt")
+    if os.path.exists(caminho):
+        with open(caminho, "r", encoding="utf-8") as f:
             return f.read()
 
     salvar_mensagem_padrao(_MENSAGEM_MODELO_PADRAO)
@@ -78,54 +87,51 @@ def carregar_mensagem_padrao() -> str:
 
 
 def salvar_mensagem_padrao(texto: str) -> None:
-    with open(MENSAGEM_FILE, "w", encoding="utf-8") as f:
+    with open(_path("mensagem_padrao.txt"), "w", encoding="utf-8") as f:
         f.write(texto)
 
 
 # ──────────────────────── ÚLTIMA LINHA ────────────────────────
 
-LAST_LINE_FILE = "last_line.json"
-
 def load_last_line() -> int:
-    if os.path.exists(LAST_LINE_FILE):
-        with open(LAST_LINE_FILE, "r") as f:
+    caminho = _path("last_line.json")
+    if os.path.exists(caminho):
+        with open(caminho, "r") as f:
             data: dict[str, Any] = json.load(f)
             return data.get("Ultima_linha_enviada", 0)
     return 0
 
 
 def save_last_line(last_line: int) -> None:
-    with open(LAST_LINE_FILE, "w") as f:
+    with open(_path("last_line.json"), "w") as f:
         json.dump({"Ultima_linha_enviada": last_line}, f)
 
 
 # ──────────────────────── SETTINGS (TEMA) ────────────────────────
 
-SETTINGS_FILE = "settings.json"
-
 def load_settings() -> dict[str, Any]:
-    if os.path.exists(SETTINGS_FILE):
-        with open(SETTINGS_FILE, "r") as f:
+    caminho = _path("settings.json")
+    if os.path.exists(caminho):
+        with open(caminho, "r") as f:
             return json.load(f)
     return {"theme": "journal"}
 
 
 def save_settings(settings: dict[str, Any]) -> None:
-    with open(SETTINGS_FILE, "w") as f:
+    with open(_path("settings.json"), "w") as f:
         json.dump(settings, f)
 
 
 # ──────────────────────── NÚMEROS ENVIADOS ────────────────────────
 
-ENVIADOS_FILE = "numeros_enviados.json"
-
 def carregar_numeros_enviados() -> set[int]:
-    if os.path.exists(ENVIADOS_FILE):
-        with open(ENVIADOS_FILE, "r") as f:
+    caminho = _path("numeros_enviados.json")
+    if os.path.exists(caminho):
+        with open(caminho, "r") as f:
             return set(json.load(f))
     return set()
 
 
 def salvar_numeros_enviados(numeros: set[int]) -> None:
-    with open(ENVIADOS_FILE, "w") as f:
+    with open(_path("numeros_enviados.json"), "w") as f:
         json.dump(list(numeros), f)
