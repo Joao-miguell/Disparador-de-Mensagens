@@ -14,7 +14,7 @@ import tkinter.messagebox
 import urllib.request
 import webbrowser
 
-VERSAO_ATUAL = "1.1.1"
+VERSAO_ATUAL = "1.2.1"
 GITHUB_USER  = "Joao-miguell"
 GITHUB_REPO  = "Disparador-de-Mensagens"
 API_URL      = f"https://api.github.com/repos/Joao-miguell/Disparador-de-Mensagens/releases/latest"
