@@ -72,6 +72,13 @@ class CourseOfferGUI:
         # ── Estado das páginas auxiliares ──
         self._editor_templates: dict[str, str] = {}
         self._editor_dados: dict[str, list[str]] = {}
+        self._editor_novo_mode: bool = False        # True enquanto criando novo template
+        self._editor_texto_anterior: str = ""       # guarda texto ao entrar no modo novo
+        self._editor_titulo_anterior: str = ""      # guarda título do combo ao entrar no modo novo
+
+        # ── Estado do gerenciador de cursos ──
+        self._cat_selecionada: str | None = None          # categoria clicada no painel de cards
+        self._cat_buttons: dict[str, object] = {}         # nome → widget botão do card
 
         # ── Gerenciador de páginas ──
         self._pages: dict[str, ttk.Frame] = {}
@@ -367,7 +374,8 @@ class CourseOfferGUI:
             "{nome} - Nome do Aluno  |  {parceiro} - Instituição (SENAI/SENAC)  |  {curso} - Nome do Curso\n"
             "{idade_minima} - Idade Mínima  |  {duracao} - Data de Início/Fim  |  {horario} - Horário do Curso"
         )
-        ttkb.Label(container, text=info_vars, bootstyle="info", justify="center").pack(pady=8)  # type: ignore
+        # wraplength evita que o texto extrapole os limites da janela
+        ttkb.Label(container, text=info_vars, bootstyle="info", justify="center", wraplength=540).pack(pady=8)  # type: ignore
 
         # ── Biblioteca de templates ──
         # lib_frame usa grid: linha 0 = combobox (fill), linha 1 = botões centralizados
@@ -375,22 +383,44 @@ class CourseOfferGUI:
         lib_frame.pack(fill="x", padx=15, pady=5)
         lib_frame.columnconfigure(0, weight=1)
 
-        # Linha 0: combobox ocupa toda a largura
+        # Linha 0: combobox (modo normal, readonly) e Entry simples (modo novo, sem dropdown)
+        # são alternados via grid_remove/grid no mesmo slot
         self.combo_templates = ttkb.Combobox(lib_frame, state="readonly")  # type: ignore
         self.combo_templates.grid(row=0, column=0, sticky="ew", padx=5, pady=(0, 6))
         configure_combobox_dropdown_scroll(self.combo_templates)
+        self.combo_templates.bind("<<ComboboxSelected>>", self._editor_on_select_template)
 
-        # Linha 1: 4 botões centralizados — nunca ficam cortados independente da escala
-        btn_row = ttk.Frame(lib_frame)
-        btn_row.grid(row=1, column=0)
-        template_buttons = [
-            ("📂 Carregar",   "info",    self._editor_load_template),
-            ("➕ Salvar Novo", "success", self._editor_save_new_template),
-            ("🔄 Atualizar",  "warning", self._editor_update_template),
-            ("🗑️ Excluir",    "danger",  self._editor_delete_template),
-        ]
-        for text, style, cmd in template_buttons:
-            ttkb.Button(btn_row, text=text, bootstyle=style, command=cmd).pack(side="left", padx=4)  # type: ignore
+        # Entry que substitui o combo no modo novo — sem dropdown, sem seta, apenas texto
+        self._entry_titulo_novo = ttk.Entry(lib_frame, font=("Arial", 10))
+        # Não é adicionado ao grid agora; será exibido por _editor_iniciar_novo_template
+
+        # Linha 1: botões — modo normal e modo novo são alternados via pack_forget/pack
+        self._btn_row = ttk.Frame(lib_frame)
+        self._btn_row.grid(row=1, column=0)
+
+        # Botões do modo NORMAL
+        self._btn_salvar_novo = ttkb.Button(  # type: ignore
+            self._btn_row, text="➕ Salvar Novo", bootstyle="success",
+            command=self._editor_iniciar_novo_template,
+        )
+        self._btn_atualizar = ttkb.Button(  # type: ignore
+            self._btn_row, text="🔄 Atualizar", bootstyle="warning",
+            command=self._editor_update_template,
+        )
+        self._btn_excluir = ttkb.Button(  # type: ignore
+            self._btn_row, text="🗑️ Excluir", bootstyle="danger",
+            command=self._editor_delete_template,
+        )
+
+        # Botões do modo NOVO (ficam ocultos até o usuário clicar Salvar Novo)
+        self._btn_confirmar = ttkb.Button(  # type: ignore
+            self._btn_row, text="💾 Confirmar Salvamento", bootstyle="success",
+            command=self._editor_confirmar_novo_template,
+        )
+        self._btn_cancelar_novo = ttkb.Button(  # type: ignore
+            self._btn_row, text="✖ Cancelar", bootstyle="secondary-outline",
+            command=self._editor_cancelar_novo_template,
+        )
 
         # ── Área de texto (atributo público — usado pelos testes) ──
         self.txt_mensagem = scrolledtext.ScrolledText(
@@ -405,13 +435,17 @@ class CourseOfferGUI:
         self.txt_mensagem.pack(padx=15, pady=10, expand=True, fill="both")
 
         # ── Botão aplicar ──
-        ttkb.Button(  # type: ignore
+        self._btn_aplicar = ttkb.Button(  # type: ignore
             container,
             text="✅ APLICAR ESTA MENSAGEM NO ROBÔ",
             command=self._salvar_mensagem_ativa,
             bootstyle="success",
             width=40,
-        ).pack(pady=10)
+        )
+        self._btn_aplicar.pack(pady=10)
+
+        # Exibe os botões do modo normal inicialmente (deve ser chamado após _btn_aplicar existir)
+        self._editor_set_novo_mode_buttons(False)
 
         # Carrega templates no combo
         self._editor_templates = carregar_templates_mensagens()
@@ -419,6 +453,9 @@ class CourseOfferGUI:
 
     def _reload_editor_text(self) -> None:
         """Recarrega texto e templates do disco ao entrar na página do editor."""
+        # Garante modo normal ao entrar na página (cancela modo novo pendente)
+        self._editor_novo_mode = False
+
         # Recarrega templates do disco para refletir alterações externas
         self._editor_templates = carregar_templates_mensagens()
         self._editor_refresh_combo()
@@ -435,37 +472,100 @@ class CourseOfferGUI:
         self.txt_mensagem.delete("1.0", tkinter.END)
         self.txt_mensagem.insert("1.0", texto)
 
+        # Auto-seleciona no combo o template que corresponde ao texto ativo
+        match = next(
+            (nome for nome, t in self._editor_templates.items() if t.strip() == texto.strip()),
+            "",
+        )
+        self._editor_sair_modo_novo(match)
+
     def _editor_refresh_combo(self) -> None:
         self.combo_templates["values"] = list(self._editor_templates.keys())
 
-    def _editor_load_template(self) -> None:
+    def _editor_on_select_template(self, _event) -> None:
+        """Auto-carrega o texto ao selecionar um template no combo (modo normal)."""
+        if self._editor_novo_mode:
+            return
         nome = self.combo_templates.get()
         if nome in self._editor_templates:
             self.txt_mensagem.delete("1.0", tkinter.END)
             self.txt_mensagem.insert("1.0", self._editor_templates[nome])
-        else:
-            tkinter.messagebox.showwarning("Aviso", "Selecione um modelo válido para carregar.", parent=self.root)
 
-    def _editor_save_new_template(self) -> None:
-        nome = simpledialog.askstring(
-            "Salvar Novo Modelo",
-            "Digite um nome para este modelo (ex: Aviso de Vagas):",
-            parent=self.root,
-        )
-        if not nome:
+    # ── Modo Novo Template ──
+
+    def _editor_iniciar_novo_template(self) -> None:
+        """Entra no modo de criação de novo template.
+        Troca o Combobox por um Entry simples (sem dropdown) na mesma célula do grid."""
+        self._editor_texto_anterior  = self._editor_get_text()
+        self._editor_titulo_anterior = self.combo_templates.get()
+        self._editor_novo_mode = True
+        # Oculta o combo e exibe o Entry no mesmo slot — sem dropdown, sem seta
+        self.combo_templates.grid_remove()
+        self._entry_titulo_novo.delete(0, tkinter.END)
+        self._entry_titulo_novo.grid(row=0, column=0, sticky="ew", padx=5, pady=(0, 6))
+        self._entry_titulo_novo.focus_set()
+        self.txt_mensagem.delete("1.0", tkinter.END)
+        self._editor_set_novo_mode_buttons(True)
+
+    def _editor_confirmar_novo_template(self) -> None:
+        """Valida e salva o novo template. Só confirma se título e texto estiverem preenchidos."""
+        titulo = self._entry_titulo_novo.get().strip()  # leitura do Entry, não do combo
+        texto  = self._editor_get_text()
+        if not titulo:
+            tkinter.messagebox.showwarning("Aviso", "Preencha o título do modelo no campo acima.", parent=self.root)
+            self._entry_titulo_novo.focus_set()
             return
-        if nome in self._editor_templates:
+        if not texto:
+            tkinter.messagebox.showwarning("Aviso", "Escreva o texto da mensagem antes de salvar.", parent=self.root)
+            self.txt_mensagem.focus_set()
+            return
+        if titulo in self._editor_templates:
             tkinter.messagebox.showwarning(
                 "Aviso",
-                "Já existe um modelo com esse nome. Use o botão 'Atualizar'.",
+                f"Já existe um modelo chamado '{titulo}'.\nEscolha outro nome ou use 'Atualizar'.",
                 parent=self.root,
             )
             return
-        self._editor_templates[nome] = self._editor_get_text()
+        self._editor_templates[titulo] = texto
         salvar_templates_mensagens(self._editor_templates)
         self._editor_refresh_combo()
+        self._editor_sair_modo_novo(titulo)
+        tkinter.messagebox.showinfo("Sucesso", f"Modelo '{titulo}' salvo na biblioteca!", parent=self.root)
+
+    def _editor_cancelar_novo_template(self) -> None:
+        """Cancela o modo novo e restaura o texto e título que estavam antes."""
+        self._editor_sair_modo_novo(self._editor_titulo_anterior)  # restaura título salvo
+        self.txt_mensagem.delete("1.0", tkinter.END)
+        self.txt_mensagem.insert("1.0", self._editor_texto_anterior)
+
+    def _editor_sair_modo_novo(self, nome: str) -> None:
+        """Retorna ao modo normal: esconde o Entry e restaura o Combobox no mesmo slot."""
+        self._editor_novo_mode = False
+        self._entry_titulo_novo.grid_remove()       # esconde o Entry
+        self._editor_refresh_combo()                # garante lista de valores atualizada
+        self.combo_templates.grid(row=0, column=0, sticky="ew", padx=5, pady=(0, 6))  # restaura combo
         self.combo_templates.set(nome)
-        tkinter.messagebox.showinfo("Sucesso", f"Modelo '{nome}' salvo na biblioteca!", parent=self.root)
+        self._editor_set_novo_mode_buttons(False)
+
+    def _editor_set_novo_mode_buttons(self, novo_mode: bool) -> None:
+        """Alterna visibilidade entre botões do modo normal e do modo novo template.
+        Também desabilita o botão Aplicar durante a criação para evitar aplicar mensagem incompleta."""
+        if novo_mode:
+            self._btn_salvar_novo.pack_forget()
+            self._btn_atualizar.pack_forget()
+            self._btn_excluir.pack_forget()
+            self._btn_confirmar.pack(side="left", padx=4)
+            self._btn_cancelar_novo.pack(side="left", padx=4)
+            self._btn_aplicar.config(state="disabled")  # bloqueia aplicar durante criação
+        else:
+            self._btn_confirmar.pack_forget()
+            self._btn_cancelar_novo.pack_forget()
+            self._btn_salvar_novo.pack(side="left", padx=4)
+            self._btn_atualizar.pack(side="left", padx=4)
+            self._btn_excluir.pack(side="left", padx=4)
+            self._btn_aplicar.config(state="normal")    # reabilita ao sair do modo criação
+
+    # ── Atualizar e Excluir ──
 
     def _editor_update_template(self) -> None:
         nome = self.combo_templates.get()
@@ -494,7 +594,20 @@ class CourseOfferGUI:
             del self._editor_templates[nome]
             salvar_templates_mensagens(self._editor_templates)
             self._editor_refresh_combo()
-            self.combo_templates.set("")
+            # Após excluir, recarrega do disco o texto da mensagem realmente ativa
+            # (o texto no editor era do template excluído, não da mensagem salva)
+            try:
+                texto_ativo = carregar_mensagem_padrao()
+            except Exception:
+                texto_ativo = ""
+            self.txt_mensagem.delete("1.0", tkinter.END)
+            self.txt_mensagem.insert("1.0", texto_ativo)
+            # Auto-match: se a mensagem ativa corresponder a algum template restante, mostra o título
+            match = next(
+                (n for n, t in self._editor_templates.items() if t.strip() == texto_ativo.strip()),
+                "",
+            )
+            self.combo_templates.set(match)
             tkinter.messagebox.showinfo("Sucesso", "Modelo excluído.", parent=self.root)
 
     def _salvar_mensagem_ativa(self) -> None:
@@ -518,12 +631,10 @@ class CourseOfferGUI:
     # ══════════════════════════════════════════════
 
     def _build_course_editor_page(self, container: ttk.Frame) -> None:
-        """Replica a UI do CourseEditor como página embutida."""
-        # O container usa .grid() para as duas colunas principais.
-        # Os frames internos de botões (frame_cat_btns, frame_cur_btns) usam .pack() — correto.
+        """Gerenciador de cursos: cards de categoria (2 colunas, scrollável) + listbox de cursos estilizado."""
         container.grid_columnconfigure(0, weight=1)
         container.grid_columnconfigure(1, weight=1)
-        container.grid_rowconfigure(2, weight=1)
+        container.grid_rowconfigure(1, weight=1)
 
         # ── Barra superior: Voltar ──
         top_bar = ttk.Frame(container, padding=(10, 8))
@@ -531,32 +642,72 @@ class CourseOfferGUI:
         ttkb.Button(top_bar, text="← Voltar", command=lambda: self._show_page("main"), bootstyle="secondary-outline").pack(side="left")  # type: ignore
         ttk.Label(top_bar, text="Gerenciador de Cursos e Categorias", font=("Arial", 12, "bold")).pack(side="left", padx=15)
 
-        # ── Cabeçalhos das colunas ──
-        ttkb.Label(container, text="1. Categorias (Grupos)", font=("Arial", 10, "bold")).grid(  # type: ignore
-            row=1, column=0, pady=10
+        # ════════════════════════════════
+        # COLUNA ESQUERDA — Categorias
+        # ════════════════════════════════
+        cat_lf = ttk.LabelFrame(container, text=" 📂 Categorias ", padding=8, bootstyle="primary")  # type: ignore
+        cat_lf.grid(row=1, column=0, sticky="nsew", padx=(10, 5), pady=(5, 0))
+        cat_lf.grid_rowconfigure(0, weight=1)
+        cat_lf.grid_columnconfigure(0, weight=1)
+
+        # Canvas com scroll para os cards de categoria
+        self._cat_canvas = tkinter.Canvas(cat_lf, highlightthickness=0)
+        cat_vsb = ttk.Scrollbar(cat_lf, orient="vertical", command=self._cat_canvas.yview)
+        self._cat_canvas.configure(yscrollcommand=cat_vsb.set)
+        self._cat_canvas.grid(row=0, column=0, sticky="nsew")
+        cat_vsb.grid(row=0, column=1, sticky="ns")
+
+        # Frame interno onde os cards são colocados (2 colunas)
+        self._cat_inner = ttk.Frame(self._cat_canvas)
+        self._cat_inner.columnconfigure(0, weight=1)
+        self._cat_inner.columnconfigure(1, weight=1)
+        self._cat_inner.bind(
+            "<Configure>",
+            lambda e: self._cat_canvas.configure(scrollregion=self._cat_canvas.bbox("all")),
         )
-        ttkb.Label(container, text="2. Cursos da Categoria", font=("Arial", 10, "bold")).grid(  # type: ignore
-            row=1, column=1, pady=10
+        self._cat_canvas_window = self._cat_canvas.create_window((0, 0), window=self._cat_inner, anchor="nw")
+        self._cat_canvas.bind(
+            "<Configure>",
+            lambda e: self._cat_canvas.itemconfig(self._cat_canvas_window, width=e.width),
         )
+        # Scroll do mouse dentro do painel de categorias
+        self._cat_canvas.bind("<Enter>", lambda _e: self._cat_canvas.bind_all("<MouseWheel>", self._cat_scroll))
+        self._cat_canvas.bind("<Leave>", lambda _e: self._cat_canvas.unbind_all("<MouseWheel>"))
 
-        # ── Listbox categorias ──
-        self.listbox_categorias = tkinter.Listbox(container, exportselection=False)
-        self.listbox_categorias.grid(row=2, column=0, sticky="nsew", padx=10)
-        self.listbox_categorias.bind("<<ListboxSelect>>", self._cursos_ao_selecionar_categoria)
+        # Botões de ação das categorias
+        frame_cat_btns = ttk.Frame(cat_lf)
+        frame_cat_btns.grid(row=1, column=0, columnspan=2, pady=(6, 0))
+        ttkb.Button(frame_cat_btns, text="+ Categoria", command=self._cursos_add_categoria, bootstyle="success-outline", width=13).pack(side="left", padx=4)  # type: ignore
+        ttkb.Button(frame_cat_btns, text="− Remover",   command=self._cursos_del_categoria, bootstyle="danger-outline",  width=13).pack(side="left", padx=4)  # type: ignore
 
-        frame_cat_btns = ttkb.Frame(container)  # type: ignore
-        frame_cat_btns.grid(row=3, column=0, pady=5)
-        ttkb.Button(frame_cat_btns, text="+ Add Categoria", command=self._cursos_add_categoria, bootstyle="success-outline", width=15).pack(pady=2)  # type: ignore
-        ttkb.Button(frame_cat_btns, text="- Remover",       command=self._cursos_del_categoria, bootstyle="danger-outline",  width=15).pack(pady=2)  # type: ignore
+        # ════════════════════════════════
+        # COLUNA DIREITA — Cursos
+        # ════════════════════════════════
+        cur_lf = ttk.LabelFrame(container, text=" 📚 Cursos da Categoria ", padding=8, bootstyle="info")  # type: ignore
+        cur_lf.grid(row=1, column=1, sticky="nsew", padx=(5, 10), pady=(5, 0))
+        cur_lf.grid_rowconfigure(0, weight=1)
+        cur_lf.grid_columnconfigure(0, weight=1)
 
-        # ── Listbox cursos ──
-        self.listbox_cursos = tkinter.Listbox(container, exportselection=False)
-        self.listbox_cursos.grid(row=2, column=1, sticky="nsew", padx=10)
+        # Listbox estilizado para cursos
+        self.listbox_cursos = tkinter.Listbox(
+            cur_lf,
+            exportselection=False,
+            font=("Arial", 11),
+            activestyle="none",
+            bd=0,
+            relief="flat",
+            selectmode=tkinter.SINGLE,
+        )
+        cur_vsb = ttk.Scrollbar(cur_lf, orient="vertical", command=self.listbox_cursos.yview)
+        self.listbox_cursos.configure(yscrollcommand=cur_vsb.set)
+        self.listbox_cursos.grid(row=0, column=0, sticky="nsew")
+        cur_vsb.grid(row=0, column=1, sticky="ns")
 
-        frame_cur_btns = ttkb.Frame(container)  # type: ignore
-        frame_cur_btns.grid(row=3, column=1, pady=5)
-        ttkb.Button(frame_cur_btns, text="+ Add Curso", command=self._cursos_add_curso, bootstyle="info-outline",   width=15).pack(pady=2)  # type: ignore
-        ttkb.Button(frame_cur_btns, text="- Remover",   command=self._cursos_del_curso, bootstyle="danger-outline", width=15).pack(pady=2)  # type: ignore
+        # Botões de ação dos cursos
+        frame_cur_btns = ttk.Frame(cur_lf)
+        frame_cur_btns.grid(row=1, column=0, columnspan=2, pady=(6, 0))
+        ttkb.Button(frame_cur_btns, text="+ Curso",  command=self._cursos_add_curso, bootstyle="info-outline",   width=13).pack(side="left", padx=4)  # type: ignore
+        ttkb.Button(frame_cur_btns, text="− Remover", command=self._cursos_del_curso, bootstyle="danger-outline", width=13).pack(side="left", padx=4)  # type: ignore
 
         # ── Rodapé: Salvar ──
         ttkb.Button(  # type: ignore
@@ -564,34 +715,63 @@ class CourseOfferGUI:
             text="💾 SALVAR ALTERAÇÕES",
             command=self._salvar_cursos_editor,
             bootstyle="success",
-        ).grid(row=4, column=0, columnspan=2, pady=15, sticky="ew", padx=20)
+        ).grid(row=2, column=0, columnspan=2, pady=12, sticky="ew", padx=20)
+
+    def _cat_scroll(self, event) -> None:
+        """Scroll do mouse dentro do painel de categorias."""
+        self._cat_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
     def _reload_curso_dados(self) -> None:
-        """Reinicia _editor_dados como cópia fresca de config_cursos e atualiza as listboxes."""
+        """Reinicia _editor_dados como cópia fresca de config_cursos e atualiza os paineis."""
         self._editor_dados = {k: list(v) for k, v in self.config_cursos.items()}
+        self._cat_selecionada = None
         self._cursos_refresh_categorias()
-        # Limpa seleção e conteúdo para evitar estado visual inconsistente
-        self.listbox_categorias.selection_clear(0, tkinter.END)
         self.listbox_cursos.delete(0, tkinter.END)
 
     def _cursos_refresh_categorias(self) -> None:
-        self.listbox_categorias.delete(0, tkinter.END)
-        for cat in self._editor_dados:
-            self.listbox_categorias.insert(tkinter.END, cat)
+        """Reconstrói os cards de categoria no painel da esquerda (2 por linha)."""
+        # Remove todos os cards antigos
+        for w in self._cat_inner.winfo_children():
+            w.destroy()
+        self._cat_buttons.clear()
+
+        for i, cat in enumerate(self._editor_dados):
+            row, col = divmod(i, 2)
+            selecionado = (cat == self._cat_selecionada)
+            style = "primary" if selecionado else "primary-outline"
+            btn = ttkb.Button(  # type: ignore
+                self._cat_inner,
+                text=cat,
+                bootstyle=style,
+                command=lambda c=cat: self._cursos_selecionar_categoria(c),
+                width=14,
+            )
+            btn.grid(row=row, column=col, padx=4, pady=4, sticky="ew")
+            self._cat_buttons[cat] = btn
+
+        # Atualiza scrollregion depois de popular
+        self._cat_inner.update_idletasks()
+        self._cat_canvas.configure(scrollregion=self._cat_canvas.bbox("all"))
+
+    def _cursos_selecionar_categoria(self, nome: str) -> None:
+        """Marca a categoria clicada e exibe seus cursos à direita."""
+        self._cat_selecionada = nome
+        # Atualiza estilo dos cards (selecionado = preenchido, outros = outline)
+        for cat, btn in self._cat_buttons.items():
+            estilo = "primary" if cat == nome else "primary-outline"
+            btn.config(bootstyle=estilo)  # type: ignore
+        self._cursos_refresh_cursos(nome)
 
     def _cursos_refresh_cursos(self, categoria: str) -> None:
         self.listbox_cursos.delete(0, tkinter.END)
-        for curso in self._editor_dados.get(categoria, []):
-            self.listbox_cursos.insert(tkinter.END, curso)
-
-    def _cursos_ao_selecionar_categoria(self, _event) -> None:
-        sel = self.listbox_categorias.curselection()
-        if sel:
-            self._cursos_refresh_cursos(self.listbox_categorias.get(sel[0]))
+        for i, curso in enumerate(self._editor_dados.get(categoria, [])):
+            self.listbox_cursos.insert(tkinter.END, f"  {curso}")
+            # Zebra striping leve para facilitar leitura
+            if i % 2 == 0:
+                self.listbox_cursos.itemconfig(i, background="#f0f4ff")
 
     def _cursos_categoria_selecionada(self) -> str | None:
-        sel = self.listbox_categorias.curselection()
-        return self.listbox_categorias.get(sel[0]) if sel else None
+        return self._cat_selecionada
 
     def _cursos_add_categoria(self) -> None:
         nova = simpledialog.askstring("Nova Categoria", "Nome da nova categoria:", parent=self.root)
@@ -605,6 +785,7 @@ class CourseOfferGUI:
             "Confirmar", f"Apagar a categoria '{cat}' e todos os seus cursos?", parent=self.root
         ):
             del self._editor_dados[cat]
+            self._cat_selecionada = None
             self._cursos_refresh_categorias()
             self.listbox_cursos.delete(0, tkinter.END)
 
