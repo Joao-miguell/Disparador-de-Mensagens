@@ -51,7 +51,10 @@ def carregar_templates_mensagens() -> dict[str, str]:
     if os.path.exists(caminho):
         with open(caminho, "r", encoding="utf-8") as f:
             return json.load(f)
-    return {}
+    # Primeira execução: cria a biblioteca com o template padrão já nomeado
+    padrao = {"Modelo padrão para cursos": _MENSAGEM_MODELO_PADRAO}
+    salvar_templates_mensagens(padrao)
+    return padrao
 
 
 def salvar_templates_mensagens(dados: dict[str, str]) -> None:
