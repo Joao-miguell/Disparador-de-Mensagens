@@ -42,32 +42,24 @@ def limpar_telefone(valor) -> int | None:
     if not valor:
         return None
 
-    # Pandas lê colunas com células vazias como float (ex: 44998618601.0)
-    # Converte para int antes de transformar em string para eliminar o ".0"
     try:
         valor = int(float(str(valor)))
     except (ValueError, OverflowError):
-        pass  # se não conseguir converter, segue com o valor original
+        pass
 
     apenas_numeros = re.sub(r"\D", "", str(valor))
 
     if not apenas_numeros:
         return None
 
-    # Já tem DDI 55 → valida tamanho (12 = fixo, 13 = celular)
     if apenas_numeros.startswith("55") and len(apenas_numeros) in (12, 13):
         pass
-
-    # Tem DDD + número, sem DDI (10 ou 11 dígitos) → adiciona 55
     elif len(apenas_numeros) in (10, 11):
         apenas_numeros = "55" + apenas_numeros
-
-    # Qualquer outro tamanho → inválido
     else:
         logging.warning("Número ignorado por formato inválido: %s", valor)
         return None
 
-    # Valida DDD brasileiro (11–99)
     ddd = int(apenas_numeros[2:4])
     if not (11 <= ddd <= 99):
         logging.warning("DDD inválido no número: %s", valor)
@@ -133,7 +125,6 @@ class MessageSender:
 
             self.on_progress(x - cfg.linha_min + 1)
 
-            # Emite status com número do contato (se disponível)
             if self.on_status:
                 try:
                     numero_raw = alunos.loc[x, "Whatsapp com DDD (somente números - sem espaço)"]
@@ -152,7 +143,7 @@ class MessageSender:
 
     def _processar_linha(self, x: int, alunos: pd.DataFrame, modelo: str) -> None:
         cfg = self.config
-        linha_log = x + 2   # índice pandas → número real na planilha
+        linha_log = x + 2
 
         if cfg.simple_mode:
             self._enviar_simples(x, alunos, modelo, linha_log)
@@ -165,9 +156,6 @@ class MessageSender:
         nome, telefone = self._extrair_contato(x, alunos)
         if telefone is None or self._ja_enviado(telefone):
             return
-
-        # No modo simples o modelo é enviado sem substituição de variáveis.
-        # Se o texto contiver {chaves}, elas aparecerão literalmente na mensagem.
         self._disparar(telefone, modelo)
         self._registrar(telefone, nome, "", linha_log)
 
@@ -184,7 +172,7 @@ class MessageSender:
                 mensagem = self._formatar_mensagem(modelo, nome)
                 self._disparar(telefone, mensagem)
                 self._registrar(telefone, nome, cfg.curso, linha_log)
-                return   # uma mensagem por aluno, mesmo que ele tenha vários cursos da categoria
+                return
 
     def _enviar_por_curso(self, x: int, alunos: pd.DataFrame, modelo: str, linha_log: int) -> None:
         cfg = self.config
@@ -243,8 +231,10 @@ class MessageSender:
         salvar_numeros_enviados(self.numeros_enviados)
         self.linhas_processadas += 1
         save_last_line(linha)
+        modo = "[SIMULAÇÃO]" if self.config.dry_run else ""
         logging.info(
-            "Mensagem enviada para: %s | Tel: %s | Curso: %s | Linha: %d",
+            "%sMensagem enviada para: %s | Tel: %s | Curso: %s | Linha: %d",
+            modo + " " if modo else "",
             nome, telefone, curso or "GENÉRICA", linha,
         )
 
@@ -255,41 +245,64 @@ class MessageSender:
         return []
 
     def _disparar(self, telefone: int, mensagem: str) -> None:
+        """
+        Modo simulação (dry_run=True): apenas loga e aguarda 1 segundo por contato,
+        sem abrir o WhatsApp Web nem mexer no mouse/teclado.
+        Modo real: comportamento original.
+        """
+        if self.config.dry_run:
+            logging.info(
+                "[SIMULAÇÃO] Contato: %s | Mensagem: %.60s...",
+                telefone, mensagem,
+            )
+            sleep(1)   # simula o tempo de envio sem travar a UI (roda em thread)
+            return
+
         img = self.config.caminho_imagem
         if img and os.path.exists(img):
             self._disparar_com_imagem(telefone, mensagem, img)
         else:
             self._disparar_sem_imagem(telefone, mensagem)
 
+    def _fechar_aba(self) -> None:
+        """
+        Fecha a aba atual e confirma o popup 'Sair do site?' do Chrome caso apareça.
+        O popup foca automaticamente o botão 'Sair', então um Enter confirma.
+        """
+        pyautogui.hotkey("ctrl", "w")
+        sleep(1)          # aguarda o popup aparecer (se houver)
+        pyautogui.press("enter")   # confirma "Sair" se o popup estiver visível;
+                                   # se não houver popup, o Enter é inofensivo
+
     def _disparar_com_imagem(self, telefone: int, mensagem: str, img_path: str) -> None:
         link = f"https://web.whatsapp.com/send/?phone={telefone}"
         webbrowser.open(link)
-        sleep(20)  # margem maior para carregamento
+        sleep(20)
 
         caminho_win = os.path.normpath(img_path).replace("'", "''")
         subprocess.run(
             f"powershell -command \"Set-Clipboard -Path '{caminho_win}'\"",
             shell=True,
         )
-        sleep(2)          # aguarda clipboard de imagem estar pronto
+        sleep(2)
         pyautogui.hotkey("ctrl", "v")
-        sleep(4)          # aguarda preview da imagem aparecer no campo
+        sleep(4)
 
         if self.root:
             self.root.clipboard_clear()
             self.root.clipboard_append(mensagem)
             self.root.update()
-        sleep(2)          # aguarda clipboard de texto estar pronto
+        sleep(2)
         pyautogui.hotkey("ctrl", "v")
-        sleep(3)          # aguarda texto aparecer no campo antes de enviar  ← era 1s
+        sleep(3)
         pyautogui.press("enter")
-        sleep(9)          # aguarda envio completar antes de fechar
-        pyautogui.hotkey("ctrl", "w")
+        sleep(9)
+        self._fechar_aba()
 
     def _disparar_sem_imagem(self, telefone: int, mensagem: str) -> None:
         link = f"https://web.whatsapp.com/send/?phone={telefone}&text={quote(mensagem)}"
         webbrowser.open(link)
-        sleep(20)         # margem maior para carregamento  ← era 17s
+        sleep(20)
         pyautogui.press("enter")
-        sleep(8)          # aguarda envio completar  ← era 6s
-        pyautogui.hotkey("ctrl", "w")
+        sleep(8)
+        self._fechar_aba()
