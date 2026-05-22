@@ -35,10 +35,6 @@ logging.basicConfig(
 # ──────────────────────── HELPERS ────────────────────────
 
 def limpar_telefone(valor) -> int | None:
-    """
-    Remove formatação, valida e normaliza para o padrão internacional brasileiro.
-    Retorna int com DDI 55 incluso, ou None se inválido.
-    """
     if not valor:
         return None
 
@@ -74,16 +70,6 @@ def limpar_telefone(valor) -> int | None:
 # ──────────────────────── CLASSE PRINCIPAL ────────────────────────
 
 class MessageSender:
-    """
-    Executa o ciclo de envio de mensagens WhatsApp.
-
-    Parâmetros de callbacks:
-      on_progress(value)         — chamado a cada linha para atualizar a barra
-      is_running()               — retorna False quando o usuário cancela
-      on_status(linha, total, n) — chamado com status de linha atual (opcional)
-      on_invalid(valor)          — chamado quando um número é inválido (opcional)
-      root                       — acesso à janela raiz para clipboard (opcional)
-    """
 
     def __init__(
         self,
@@ -107,12 +93,7 @@ class MessageSender:
         self.linhas_puladas_historico = 0
         self.invalidos: list[str] = []
 
-    # ── Ponto de entrada ──
-
     def run(self) -> tuple[int, int, list[str]]:
-        """
-        Executa o envio. Retorna (linhas_processadas, linhas_puladas_historico, invalidos).
-        """
         cfg = self.config
         alunos = self._carregar_planilha(cfg.caminho_planilha)
         modelo = carregar_mensagem_padrao()
@@ -138,8 +119,6 @@ class MessageSender:
                 logging.warning("Erro ao processar linha %d: %s", x, exc)
 
         return self.linhas_processadas, self.linhas_puladas_historico, self.invalidos
-
-    # ── Processamento por linha ──
 
     def _processar_linha(self, x: int, alunos: pd.DataFrame, modelo: str) -> None:
         cfg = self.config
@@ -188,8 +167,6 @@ class MessageSender:
                 self._registrar(telefone, nome, cfg.curso, linha_log)
                 return
 
-    # ── Helpers internos ──
-
     def _carregar_planilha(self, caminho: str) -> pd.DataFrame:
         return pd.read_excel(caminho)
 
@@ -231,10 +208,8 @@ class MessageSender:
         salvar_numeros_enviados(self.numeros_enviados)
         self.linhas_processadas += 1
         save_last_line(linha)
-        modo = "[SIMULAÇÃO]" if self.config.dry_run else ""
         logging.info(
-            "%sMensagem enviada para: %s | Tel: %s | Curso: %s | Linha: %d",
-            modo + " " if modo else "",
+            "Mensagem enviada para: %s | Tel: %s | Curso: %s | Linha: %d",
             nome, telefone, curso or "GENÉRICA", linha,
         )
 
@@ -245,19 +220,6 @@ class MessageSender:
         return []
 
     def _disparar(self, telefone: int, mensagem: str) -> None:
-        """
-        Modo simulação (dry_run=True): apenas loga e aguarda 1 segundo por contato,
-        sem abrir o WhatsApp Web nem mexer no mouse/teclado.
-        Modo real: comportamento original.
-        """
-        if self.config.dry_run:
-            logging.info(
-                "[SIMULAÇÃO] Contato: %s | Mensagem: %.60s...",
-                telefone, mensagem,
-            )
-            sleep(1)   # simula o tempo de envio sem travar a UI (roda em thread)
-            return
-
         img = self.config.caminho_imagem
         if img and os.path.exists(img):
             self._disparar_com_imagem(telefone, mensagem, img)
@@ -270,9 +232,8 @@ class MessageSender:
         O popup foca automaticamente o botão 'Sair', então um Enter confirma.
         """
         pyautogui.hotkey("ctrl", "w")
-        sleep(1)          # aguarda o popup aparecer (se houver)
-        pyautogui.press("enter")   # confirma "Sair" se o popup estiver visível;
-                                   # se não houver popup, o Enter é inofensivo
+        sleep(1)
+        pyautogui.press("enter")
 
     def _disparar_com_imagem(self, telefone: int, mensagem: str, img_path: str) -> None:
         link = f"https://web.whatsapp.com/send/?phone={telefone}"
